@@ -1,0 +1,24 @@
+{
+    "id": "FBC64D30",
+    "path": "D:/ChIP seq and RNA seq analysis/Misc/Seurat_to_Monocle3/Single-cell-RNA-seq.Rmd",
+    "project_path": "Single-cell-RNA-seq.Rmd",
+    "type": "r_markdown",
+    "hash": "0",
+    "contents": "",
+    "dirty": false,
+    "created": 1694961967742.0,
+    "source_on_save": false,
+    "relative_order": 1,
+    "properties": {
+        "source_window_id": "",
+        "Source": "Source"
+    },
+    "folds": "",
+    "lastKnownWriteTime": 1680425854,
+    "encoding": "ISO8859-1",
+    "collab_server": "",
+    "source_window": "",
+    "last_content_update": 1680425854,
+    "read_only": false,
+    "read_only_alternatives": []
+}

@@ -1,0 +1,279 @@
+---
+title: "Single cell RNA seq"
+author: "Mahima Bose"
+date: '2022-07-08'
+output: html_document
+---
+
+```{r setup, results='hide'}
+
+#if (!requireNamespace("BiocManager", quietly = TRUE))
+#install.packages("BiocManager")
+#install.packages("devtools")
+#devtools::install_github('cole-trapnell-lab/monocle3')
+#install.packages('Seurat')
+#remotes::install_github('satijalab/seurat-wrappers')
+library(Seurat)
+library(tidyverse)
+library(dplyr)
+library(monocle3)
+library(SeuratWrappers)
+library(ggplot2)
+library(ggridges)
+```
+
+## Read 10X dataset(feature barcode matrix) and create a Seurat Object
+
+```{r Seurat: Load dataset}
+
+data <- Read10X(data.dir = "D:/ChIP seq and RNA seq analysis/Arlotta_lab scRNA/E17.5.filtered_feature_bc_matrix")
+data <- CreateSeuratObject(counts = data, project='E17.5', min.cells = 3, min.features = 200)
+```
+
+##Check and Visualize QC metrics like mitochonrial RNA reads.
+
+```{r QC: MT reads}
+data[["percent.mt"]] <- PercentageFeatureSet(data, pattern = "^MT-")
+VlnPlot(data, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3)
+```
+
+## Visualising the quality of reads per cell
+
+```{r Feature plot}
+FeatureScatter(data, feature1 = "nCount_RNA", feature2 = "nFeature_RNA") + geom_smooth()
+```
+
+## Filtering and removing low quality cells
+
+```{r Filtering}
+data <- subset(data, subset = nFeature_RNA >200 & nFeature_RNA <2500 & percent.mt <5)
+```
+
+## Normalising data
+
+```{r Normalize data}
+data <- NormalizeData(data)
+```
+
+## Identify highly variable features
+
+```{r Find Variable Features}
+data <- FindVariableFeatures(data, selection.method = "vst", nfeatures = 2000)
+top10 <- head(VariableFeatures(data), 10)
+top10
+```
+
+## Plot variable features
+
+```{r Variable Features}
+plot1 <- VariableFeaturePlot(data)
+LabelPoints(plot = plot1, points = top10, repel = T)
+```
+
+## Scaling data
+
+```{r Scaling data, message=FALSE}
+all.genes <- rownames(data)
+data <- ScaleData(data, features = all.genes)
+```
+
+## Perform Dimensionality Reduction
+
+```{r PCA}
+data <- RunPCA(data, features = VariableFeatures(object = data))
+DimHeatmap(data, dims = 1:6, cells = 500, balanced = T)
+```
+
+## Determine Dimensionality of the data
+
+```{r Elbow Plot}
+ElbowPlot(data)
+```
+
+## Clustering data
+
+```{r Clustering}
+data <- FindNeighbors(data, dims = 1:20)
+```
+
+## Understanding the resolution of the clustering
+
+```{r Clustering Resolution}
+data <- FindClusters(data, resolution = c(0.3, 0.5, 0.7, 1))
+head(data@meta.data)
+```
+
+```{r Dimplot}
+p1 <- DimPlot(data, group.by = "RNA_snn_res.0.3", label = T)
+p2 <- DimPlot(data, group.by = "RNA_snn_res.0.5", label = T)
+p3 <- DimPlot(data, group.by = "RNA_snn_res.0.7", label = T)
+p4 <- DimPlot(data, group.by = "RNA_snn_res.1", label = T)
+p1 + p2 + p3 + p4
+```
+
+## Setting Identity of Clusters
+
+```{r setting resolution}
+Idents(data) <- "RNA_snn_res.0.7"
+```
+
+## Non-linear Dimensionality Reduction: UMAP
+
+```{r UMAP}
+data <- RunUMAP(data, dims = 1:20)
+DimPlot(data, reduction = "umap")
+```
+
+## Looking at Variable Features to identify cluster markers
+
+```{r Violin plot of genes}
+VlnPlot(data, features = c("Pax6", "Rbfox1"), slot = "counts", log = TRUE)
+
+```
+
+## Looking at cluster markers to identify UMAP clusters
+
+```{r Feature Plot}
+FeaturePlot(data, features = c("Pax6",  "Eomes", "Aldh1l1",
+                               "Tbr1",  "Olig2", "Sox2", "Cux2", "Neurog2"))
+```
+
+## Rename Clusters
+
+```{r Rename}
+#new.cluster.ids <- c("A progenitors","B progenitors", "Cnn2+ Msx1+ population" , "B progenitors", "Putative early neuronal population", "Lmx1a+ population",
+#                      "Intermediate Projenitors")
+#names(new.cluster.ids) <- levels(data)
+#data <- RenameIdents(data, new.cluster.ids)
+#DimPlot(data, reduction = "umap", label = TRUE, pt.size = 0.5) 
+
+```
+
+# Trajectory Analysis with Monocle3
+
+## Converting seuratobject to celldataset object for Monocle3
+
+```{r Pre-processing, results='hide'}
+cds <- as.cell_data_set(data)
+```
+
+## Get cell metadata
+
+```{r, colData}
+head(colData(cds))
+```
+
+## Get feature/gene metadata
+
+```{r feature Metadata}
+fData(cds)
+rownames(fData(cds))[1:10]
+fData(cds)$gene_short_name <- rownames(fData(cds))
+head(fData(cds))
+
+
+```
+
+## Get counts
+
+```{r, results='hide'}
+head(counts(cds))
+```
+
+## Retrieve clustering information from Seurat object
+
+## 1. Assign partitions
+
+```{r Recreate Partitions}
+recreate.partitions <- c(rep(1, length(cds@colData@rownames)))
+names(recreate.partitions) <- cds@colData@rownames
+recreate.partitions <- as.factor(recreate.partitions)
+recreate.partitions
+
+cds@clusters@listData[["UMAP"]][["partitions"]] <- recreate.partitions
+```
+
+## Assign cluster information
+
+```{r create clusters}
+list.cluster <- data@active.ident
+cds@clusters@listData[["UMAP"]][["clusters"]] <- list.cluster
+```
+
+## Assign UMAP coordinates
+
+```{r UMAP Coordinates}
+cds@int_colData@listData[["reducedDims"]]@listData[["UMAP"]] <- data@reductions$umap@cell.embeddings
+```
+
+## Plot
+
+```{r plot clusters}
+cluster.before.traj <-plot_cells(cds, color_cells_by = "cluster", label_groups_by_cluster = F, 
+           group_label_size = 5) + theme(legend.position = "right")
+cluster.before.traj
+```
+
+## Learn Trajectory
+
+```{r Trajectory}
+cds <- learn_graph(cds, use_partition = F)
+plot_cells(cds, color_cells_by = "cluster", label_groups_by_cluster = F,
+           label_branch_points = T, label_roots = T, label_leaves = F,
+           group_label_size = 5)
+```
+
+## Order cells in Pseudotime
+
+```{r Pseudotime data generation}
+cds <- order_cells(cds, reduction_method = "UMAP", root_cells = colnames(cds[, clusters(cds) == 5]))
+plot_cells(cds, color_cells_by = "pseudotime", label_groups_by_cluster = T,
+           label_branch_points = T, label_roots = F, label_leaves = F)
+```
+
+## Cells ordered by Monocle3 Pseudotime
+
+```{r Pseudo per cluster}
+pseudotime(cds)
+cds$monocle3_pseudotime <- pseudotime(cds)
+data.pseudo <- as.data.frame(colData(cds))
+
+ggplot(data.pseudo, aes(monocle3_pseudotime, seurat_clusters, fill = seurat_clusters)) + geom_boxplot()
+```
+
+```{r plot ordered pseudotime}
+ggplot(data.pseudo, aes(monocle3_pseudotime, reorder(seurat_clusters, monocle3_pseudotime), fill = seurat_clusters)) + geom_boxplot()
+```
+
+## Find genes that change as a function of pseudotime
+
+```{r Genes of pseudotime, results='hide'}
+deg <- graph_test(cds, neighbor_graph = "principal_graph")
+deg %>% arrange(q_value) %>% filter(status == "OK") %>% head()
+```
+
+```{r Features}
+FeaturePlot(data, features = c("Rgs20", "Bend6", "Mcm3", "B3gat2"))
+```
+
+## Add pseudotime values into the seuratobject
+
+```{r Pseudotime}
+data$pseudotime <- pseudotime(cds)
+FeaturePlot(data, features = "pseudotime")
+```
+
+```{r Ridgeplot}
+RidgePlot(data, features = c("Sox2", "Eomes", "Neurod2"), sort = T, idents = c("5", "6", "0", "1", "7"))
+```
+
+```{r Plot genes by pseudotime}
+my_genes <- row.names(subset(fData(cds), gene_short_name %in% c("Sox2", "Eomes", "Neurod2"))) 
+cds_subset <- cds[my_genes,]
+plot_genes_in_pseudotime(cds_subset, color_cells_by = "monocle3_pseudotime" )
+```
+
+
+
+
+

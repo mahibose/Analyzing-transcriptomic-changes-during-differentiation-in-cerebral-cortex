@@ -1,0 +1,9 @@
+{
+    "sortOrder": [
+        {
+            "columnIndex": 2,
+            "ascending": true
+        }
+    ],
+    "path": "D:/ChIP seq and RNA seq analysis/Misc/Seurat_to_Monocle3"
+}
