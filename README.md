@@ -1,4 +1,4 @@
-# Seurat_to_Monocle3_v2
+# Analyzing transcriptomic changes upon stem cell to neuron differentiation in the developing cerebral cortex
 Pipeline to analyze single-cell data from Seurat and perform trajectory analysis with Monocle3
 ```
 library(Seurat)
